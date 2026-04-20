@@ -9,16 +9,26 @@ export type VotacaoFiltros = {
   votosMax?: number;
 };
 
+const MAX_ROWS = 10000;
+
 export async function listMunicipios(): Promise<string[]> {
   const supabase = createClient();
-  const { data, error } = await supabase
+
+  const { data, error } = await supabase.rpc("list_municipios");
+  if (!error && data) {
+    return (data as Array<{ municipio: string }>).map((r) => r.municipio);
+  }
+
+  const fallback = await supabase
     .from("votacao")
     .select("municipio")
-    .order("municipio");
+    .order("municipio")
+    .limit(MAX_ROWS);
 
-  if (error) throw error;
-  const unicos = Array.from(new Set((data ?? []).map((r) => r.municipio)));
-  return unicos;
+  if (fallback.error) throw fallback.error;
+  return Array.from(
+    new Set((fallback.data ?? []).map((r) => r.municipio))
+  );
 }
 
 export async function listVotacao(
@@ -37,7 +47,9 @@ export async function listVotacao(
     query = query.lte("votos", filtros.votosMax);
   }
 
-  const { data, error } = await query.order("votos", { ascending: false });
+  const { data, error } = await query
+    .order("votos", { ascending: false })
+    .limit(MAX_ROWS);
   if (error) throw error;
   return (data ?? []) as Votacao[];
 }
